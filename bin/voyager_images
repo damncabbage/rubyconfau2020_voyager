@@ -1,0 +1,202 @@
+#!/usr/bin/env ruby
+# TODO:
+# - Audio sample iterator, "currently looking at" buffer, image buffer
+# - Looking-At buffer is too long (ask for too much); use this to look for the next minimum.
+# - Keep left-overs around to make up part of the next frame/line's Looking-At buffer.
+#   ^-- This thing above is good fodder for a talk; good visuals, good "working this out from nothing" story
+#       Keep previous attempt images around
+#
+# Also:
+# - Consider Matrix from stdlib
+
+require 'bundler/setup'
+
+require 'logger'
+require 'wavefile'
+require File.expand_path('../lib/bitmap', File.dirname(__FILE__))
+
+def main
+  init_logger!
+  wav, image = ["./384kHzStereo.wav", "./384kHzStereo.bmp"]
+  wav_to_image(wav, image)
+  info!("Done!")
+end
+
+class Enumerator
+  def skip(n)
+    n.times { self.next }
+    self
+  end
+  def take(n)
+    result = []
+    n.times { result << self.next }
+    result
+  end
+end
+
+def init_logger!
+  @logger = Logger.new(STDOUT)
+  @logger.level = ENV.fetch('LOG_LEVEL', 'DEBUG')
+end
+[:debug, :info, :error].each do |level|
+  define_method("#{level}!") do |message, *args|
+    @logger.send(level, message.gsub(/{(\?:)?}/, '%s') % args.map {|a| a&.inspect })
+  end
+end
+
+def wav_to_image(wav_filename, img_filename)
+  lines = scaled_lines_from_wav(wav_filename, 0..255)
+  image = image_from_lines(lines, img_filename)
+end
+
+def scaled_lines_from_wav(filename, rescale_range)
+  lines = []
+  WaveFile::Reader.new(filename) do |reader|
+
+    # File info from afinfo:
+    #   384kHzStereo.wav
+    #   File:       384kHzStereo.wav
+    #   File type ID:   WAVE
+    #   Num Tracks:   1
+    #   ----
+    #   Data format:   2 ch, 384000 Hz, 'lpcm' (0x00000009) 32-bit little-endian float
+    #          no channel layout.
+    #   estimated duration: 473.856000 sec
+    #   audio bytes: 1455685632
+    #   audio packets: 181960704
+    #   bit rate: 24576000 bits per second
+    #   packet size upper bound: 8
+    #   maximum packet size: 8
+    #   audio data file offset: 88
+    #   optimized
+    #   source bit depth: F32
+    #   ----
+
+    # File info from Hound:
+    #   println!("{:?}", reader.spec());
+    #   WavSpec { channels: 2, sample_rate: 384000, bits_per_sample: 32, sample_format: Float }
+    #
+    # Extra info:
+    #   num_samples = 363_921_408
+    #   start (before first 'buffer'): 00:00:15.674 sec, 6_023_017 samples
+    #   length of each 'content' chunk: 0.006 sec, 2564 samples long
+    #   length of each 'buffer' chunk: 0.002 sec, 649 sampless long
+
+    #before_first_buffer_chunk = 6_019_836
+    #content_chunk_length = 2_555
+    #buffer_chunk_length = 643
+    #before_last_buffer_chunk = 7_707_417
+
+    before_first_buffer_chunk = 6_019_206
+    content_chunk_length = 2_555
+    buffer_chunk_length = 643
+    before_last_buffer_chunk = 7_707_417
+
+    picture_length = before_last_buffer_chunk - before_first_buffer_chunk; # 1687581
+    # TODO: where is 525?
+    discard_buffer = 0; # try ~40 ... or, TODO: try aligning on lowest.
+
+    #num_samples = reader.sampler_info.
+
+    # Total samples should be 363_921_408...
+    num_samples = reader.total_sample_frames # => 181_960_704
+    # ... which is (363_921_408 / 2)
+
+    # TO DO:
+    # - Seek to where we think the first sample is starting (hardcoded)
+    reader.read(before_first_buffer_chunk)
+
+    # - Figure out how long we want to grab a sample for (hardcoded)
+    # - Iterate for that amount, pulling out only the Left channel (the one with the calibration picture on it).
+    samples = reader
+      .read(picture_length)
+      .samples
+      .map(&:first) # Left channel only
+      .each # -> Enumerator
+
+    for _idx in 0...(picture_length / (content_chunk_length + buffer_chunk_length))
+      line = []
+      min, max, line = samples
+        .skip(buffer_chunk_length)
+        .take(content_chunk_length)
+        .each_slice(5).map(&:first)
+        .reduce([Float::INFINITY, Float::INFINITY * -1, []]) do |(min, max, ss), sample|
+          # TODO: Not a good idea...?
+          #if sample < 0.0
+          #  sample = 0
+          #end
+          ss.push(sample)
+          result = [min, max, ss]
+          if sample < min
+            result[0] = sample
+          end
+          if sample > max
+            result[1] = sample
+          end
+          #printf("% 02.6f | % 02.6f .. % 02.6f\n", sample, result[0], result[1])
+          result
+        end
+
+      rescaled_line = line
+        .map do |sample|
+          rescale_from, rescale_to = rescale_range.first, rescale_range.last
+          ((sample - min) * (rescale_to - rescale_from) / (max - min) + rescale_from).floor
+        end
+
+      lines.push(rescaled_line)
+    end
+    debug!("Samples: {}", num_samples)
+    debug!("Lines: {} {}", lines.class, lines.length)
+    debug!("Lines[0]: {} {}", lines[0].class, lines[0].length)
+    debug!("Lines[0][0]: {} {}", lines[0][0].class, lines[0][0].inspect)
+  end
+  lines
+end
+
+def image_from_lines(lines, filename)
+  # TODO: Actually make things the right size.
+
+  # 525 high x 2564 wide, ie. picture_length high x content_chunk_length wide
+  #height = 528
+  #width = 2564
+  height = lines.length
+  width = lines[0].length
+  #picture = Array.new(0, 1353792)
+
+  Bitmap.new(filename, width, height) do |bmp|
+    #for row_idx in 0..lines.length 
+    #  row_idx_base = row_idx * width
+    #  v_row = lines[row_idx]
+    #  debug!("{}, {}, {}: {}", row_idx, row_idx_base, row_idx_base + v_row.length, v_row.length)
+    #  for col_idx in 0..v_row.length
+    #    picture[row_idx_base + col_idx] = v_row[col_idx]
+    #  end
+    #end
+    for row_idx in 0...(lines.length)
+      bmp << lines[row_idx].map do |rb|
+        b = 255 - rb
+        0xFF000000 | (b << 16) | (b << 8) | b
+      end
+    end
+  end
+end
+
+main
+
+###include WaveFile
+###
+###STARTING_NUMBER_OF_SECONDS = 3 * 60   # Starting point is 3 minutes into file
+###ENDING_NUMBER_OF_SECONDS = 7 * 60   # Ending point is 7 minutes into file
+###
+###Reader.new("file_to_trim.wav") do |reader|
+###  STARTING_SAMPLE_FRAME = reader.format.sample_rate * STARTING_NUMBER_OF_SECONDS
+###  ENDING_SAMPLE_FRAME = reader.format.sample_rate * ENDING_NUMBER_OF_SECONDS
+###
+###  # Read up to the starting trim point
+###  throwaway_buffer = reader.read(STARTING_SAMPLE_FRAME)
+###
+###  Writer.new("trimmed_file.wav", reader.format) do |writer|
+###  buffer = reader.read(ENDING_SAMPLE_FRAME - STARTING_SAMPLE_FRAME)
+###  writer.write(buffer)
+###  end
+###end

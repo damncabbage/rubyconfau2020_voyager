@@ -1,0 +1,273 @@
+#!/usr/bin/env ruby
+require "pathname";module Kernel;def dbg!(val, name);loc = caller_locations(1, 1).first;path = nil;puts "[#{loc.base_label}, #{path}:#{loc.lineno}] [#{name}]: #{val.inspect}";val;end;end
+
+require 'bundler/setup'
+require 'logger'
+require 'wavefile'
+require 'bezier_curve'
+require File.expand_path('../lib/bitmap', File.dirname(__FILE__))
+
+require 'matrix'
+def rotate_array(arr)
+  #Matrix[ [0,1,2,3,4,5,6], [6,5,4,3,2,1,0], [6,6,6,6,6,6,6], [0,0,0,0,0,0,0] ].transpose.reverse
+  # ^-- the image is upside-down without this reverse.
+  Matrix[*arr].transpose.to_a.reverse
+end
+
+def rescale(input, oldr, newr)
+  oldmin, oldmax = oldr
+  newmin, newmax = newr
+  return nil if input.nil? || input < oldmin || input > oldmax
+  ((input - oldmin) * (newmax - newmin) / (oldmax - oldmin) + newmin).floor
+end
+
+def points_on_line(idx_to_val, length, default)
+  Array.new(length, default).tap do |a|
+    idx_to_val.each { |(idx, val)|
+      a[idx] = val unless idx.nil?
+    }
+  end
+end
+
+BLACK = 0xFF000000
+WHITE = 0xFFFFFFFF
+RED   = 0xFFFF0000
+BLUE  = 0xFF4444FF
+
+def image_from_lines(lines, filename)
+  # Assumes 0 - 255
+  height = lines.length
+  width = lines[0].length
+  Bitmap.new(filename, width, height) do |bmp|
+    for row_idx in 0...(lines.length)
+      bmp << lines[row_idx].map do |rb|
+        rb
+        #b = 255 - rb
+        #0xFF000000 | (b << 16) | (b << 8) | b
+      end
+    end
+  end
+end
+
+def samples_to_graph!(samples, name, range = [-32768, 32768])
+  lines = samples.map do |s|
+    points_on_line(
+      [ [rescale(s, range, [0, 255]), BLACK] ],
+      255,
+      WHITE,
+    )
+  end
+  image_from_lines(rotate_array(lines), "./#{name}.bmp")
+end
+
+def embiggen_and_imgcat!(filename)
+  puts `convert "./#{filename}.bmp" -resize x500 - | imgcat`
+end
+
+
+# Both files are 32-bit.
+
+def ex1
+  WaveFile::Reader.new(
+    File.expand_path('../440Hz,441samples.wav', File.dirname(__FILE__))
+  ) do |reader|
+    samples = reader.read(441).samples.to_a
+    #puts samples.map(&:inspect).join(",")
+    samples_to_graph!(samples, '440constant')
+    embiggen_and_imgcat!('440constant')
+  end
+end
+
+def ex2
+  WaveFile::Reader.new(
+    File.expand_path('../0-440Hz,441samples.wav', File.dirname(__FILE__))
+  ) do |reader|
+    samples = reader.read(441).samples.to_a
+    #puts samples.map(&:inspect).join(",")
+    fn = '440rising'
+    samples_to_graph!(samples, fn)
+    embiggen_and_imgcat!(fn)
+  end
+end
+
+def ex3
+  WaveFile::Reader.new(
+    File.expand_path('../FirstChunk.wav', File.dirname(__FILE__))
+  ) do |reader|
+    reader.read(42016)
+    samples = reader.read(500).samples.to_a
+    #puts samples.map(&:inspect).join(",")
+    fn = 'FirstChunk'
+    samples_to_graph!(samples, fn, [-0.3, 0.3])
+    embiggen_and_imgcat!(fn)
+  end
+end
+
+def ex4
+  WaveFile::Reader.new(
+    File.expand_path('../FirstChunk.wav', File.dirname(__FILE__))
+  ) do |reader|
+    reader.read(72130)
+    samples = reader.read(500).samples.to_a
+    #puts samples.map(&:inspect).join(",")
+    fn = 'FirstChunk'
+    #samples_to_graph!(samples, fn, [-0.3, 0.3])
+    
+    range = [-0.3, 0.3]
+    eq = -> (x) { 16.0 / (-x - 12.0) + 0.06 }
+    lines = samples.each_with_index.map do |s,x|
+      curve_point = [ rescale(eq.(x), range, [0, 254]), RED ]
+      sample_point = [ rescale(s, range, [0, 255]), BLACK ]
+      points_on_line([curve_point, sample_point], 255, WHITE)
+    end
+    image_from_lines(rotate_array(lines), "./#{fn}.bmp")
+    
+    embiggen_and_imgcat!(fn)
+  end
+end
+
+def ex5
+  WaveFile::Reader.new(
+    File.expand_path('../FirstChunk.wav', File.dirname(__FILE__))
+  ) do |reader|
+    reader.read(42016)
+    samples = reader.read(500).samples.to_a
+    #puts samples.map(&:inspect).join(",")
+    fn = 'FirstChunk'
+
+    range = [-0.3, 0.3]
+    eq = -> (x) { 5 / (-x - 2) + 1 }
+    eq = -> (x) { x / 2000.0 }
+    eq = -> (x) { 16.0 / (-x - 14.0) + 0.06 }
+    lines = samples.each_with_index.map do |s,x|
+      curve_point = [ rescale(eq.(x), range, [0, 254]), RED ]
+      sample_point = [ rescale(s, range, [0, 255]), BLACK ]
+      points_on_line([curve_point, sample_point], 255, WHITE)
+    end
+    image_from_lines(rotate_array(lines), "./#{fn}.bmp")
+
+    embiggen_and_imgcat!(fn)
+  end
+end
+
+def ex6
+  WaveFile::Reader.new(
+    File.expand_path('../FirstChunk.wav', File.dirname(__FILE__))
+  ) do |reader|
+    #reader.read(42085)
+    #samples = reader.read(500).samples.to_a
+    #reader.read(72195)
+    reader.read(6103)
+    samples = reader.read(500).samples.to_a
+    #puts samples.map(&:inspect).join(",")
+    fn = 'FirstChunk'
+
+    range = [-0.3, 0.3]
+    eq = -> (x) { 5 / (-x - 2) + 1 }
+    eq = -> (x) { x / 2000.0 }
+    eq = -> (x) { (-18.0 / (x + 90.0)) + 0.065 }
+
+    points = [
+      [0,  -0.121],
+      [0,   0.015],
+      [0.1, 0.015], # <-- pull curve to the left
+      [7,   0.015], # <-- ditto
+      [293, 0.015],
+    ]
+    curve = BezierCurve.new(*points).points(count: points.last[0])
+
+    lines = samples.each_with_index.map do |s,x|
+      eq_point     = [ rescale(eq.(x), range, [0, 254]), RED ]
+      bezier_point = [ rescale(curve[x]&.last, range, [0, 254]), BLUE ]
+      sample_point = [ rescale(s, range, [0, 255]), BLACK ]
+      points_on_line([eq_point, bezier_point, sample_point], 255, WHITE)
+    end
+    image_from_lines(rotate_array(lines), "./#{fn}.bmp")
+
+    embiggen_and_imgcat!(fn)
+  end
+end
+
+def ex7
+  WaveFile::Reader.new(
+    File.expand_path('../FirstChunk.wav', File.dirname(__FILE__))
+  ) do |reader|
+    reader.read(42085)
+    #samples = reader.read(500).samples.to_a
+    #reader.read(72195)
+    #reader.read(6103)
+    samples = reader.read(500).samples.to_a
+    #puts samples.map(&:inspect).join(",")
+    fn = 'FirstChunk'
+
+    range = [-0.3, 0.3]
+    eq = -> (x) { 5 / (-x - 2) + 1 }
+    eq = -> (x) { x / 2000.0 }
+    eq = -> (x) { (-18.0 / (x + 90.0)) + 0.065 }
+
+    points = [
+      [0,  -0.131],
+      [0,   0.015],
+      [0.1, 0.015], # <-- pull curve to the left
+      [7,   0.015], # <-- ditto
+      [293, 0.015],
+    ]
+    curve = BezierCurve.new(*points).points(count: points.last[0])
+
+    lines = samples.each_with_index.map do |s,x|
+      eq_point     = [ rescale(eq.(x), range, [0, 254]), RED ]
+      bezier_point = [ rescale(curve[x]&.last, range, [0, 254]), BLUE ]
+      sample_point = [ rescale(s, range, [0, 255]), BLACK ]
+      points_on_line([eq_point, bezier_point, sample_point], 255, WHITE)
+    end
+    image_from_lines(rotate_array(lines), "./#{fn}.bmp")
+
+    embiggen_and_imgcat!(fn)
+  end
+end
+
+def ex8
+  WaveFile::Reader.new(
+    File.expand_path('../FirstChunk.wav', File.dirname(__FILE__))
+  ) do |reader|
+    reader.read(42085)
+    samples = reader.read(500).samples.to_a
+    fn = 'FirstChunk'
+
+    range = [-0.3, 0.3]
+
+    points = [
+      [0,  -0.131],
+      [0,   0.015],
+      [0.1, 0.015], # <-- pull curve to the left
+      [7,   0.015], # <-- ditto
+      [293, 0.015],
+    ]
+    curve = BezierCurve.new(*points).points(count: points.last[0])
+
+    lines = samples.each_with_index.map do |s,x|
+      sample_point = [ rescale(s, range, [0, 255]), BLACK ]
+
+      bezier = curve[x]&.last
+      bezier_point = [ rescale(bezier, range, [0, 254]), BLUE ]
+
+      new_floor = points.max_by(&:last).last
+      corrected = (new_floor + (s - bezier)).clamp(new_floor, Float::INFINITY) unless bezier.nil?
+      corrected_point = [ rescale(corrected, range, [0, 254]), RED ]
+
+      points_on_line([bezier_point, sample_point, corrected_point], 255, WHITE)
+    end
+    image_from_lines(rotate_array(lines), "./#{fn}.bmp")
+
+    embiggen_and_imgcat!(fn)
+  end
+end
+
+#ex1; puts "======\n"
+#ex2; puts "======\n"
+#ex3; puts "======\n"
+#ex4; puts "======\n"
+#ex5; puts "======\n"
+ex6; puts "======\n"
+ex7; puts "======\n"
+ex8; puts "======\n"
