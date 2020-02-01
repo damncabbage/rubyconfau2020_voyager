@@ -5,7 +5,7 @@ require 'bundler/setup'
 require 'logger'
 require 'wavefile'
 require 'bezier_curve'
-require File.expand_path('../lib/bitmap', File.dirname(__FILE__))
+require_relative '../lib/ppm'
 
 require 'matrix'
 def rotate_array(arr)
@@ -29,22 +29,18 @@ def points_on_line(idx_to_val, length, default)
   end
 end
 
-BLACK = 0xFF000000
-WHITE = 0xFFFFFFFF
-RED   = 0xFFFF0000
-BLUE  = 0xFF4444FF
+BLACK = [0, 0, 0]
+WHITE = [255, 255, 255]
+RED   = [255, 0, 0]
+BLUE  = [68, 68, 255]
 
 def image_from_lines(lines, filename)
   # Assumes 0 - 255
   height = lines.length
   width = lines[0].length
-  Bitmap.new(filename, width, height) do |bmp|
+  PPM.new(filename, width, height) do |img|
     for row_idx in 0...(lines.length)
-      bmp << lines[row_idx].map do |rb|
-        rb
-        #b = 255 - rb
-        #0xFF000000 | (b << 16) | (b << 8) | b
-      end
+      img << lines[row_idx]
     end
   end
 end
