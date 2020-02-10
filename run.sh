@@ -1,8 +1,8 @@
 #!/bin/bash
 
-#while true; do find src -name "*.rs" | entr -dcs 'RUST_BACKTRACE=1 RUST_LOG=debug cargo run && imgcat 384kHzStereo.bmp'; sleep 2; done
+: "${BIN_TO_RUN:=${1:-bin/voyager_images}}"
 
 while true; do
-  find bin -type f -name "samples_learning" | entr -dcs 'bin/samples_learning'
+  find "$(dirname "$BIN_TO_RUN")" -type f -name "$(basename "$BIN_TO_RUN")" | entr -dcs "$BIN_TO_RUN"
   sleep 2
 done

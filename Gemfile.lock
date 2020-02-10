@@ -2,6 +2,7 @@ GEM
   remote: https://rubygems.org/
   specs:
     bezier_curve (0.9.2)
+    byebug (11.1.1)
     wavefile (1.1.0)
 
 PLATFORMS
@@ -9,6 +10,7 @@ PLATFORMS
 
 DEPENDENCIES
   bezier_curve
+  byebug
   wavefile
 
 BUNDLED WITH
