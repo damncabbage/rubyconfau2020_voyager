@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require 'bundler/setup'
+require 'pry'
 require 'ostruct'
 require 'matrix'
 
@@ -63,7 +64,7 @@ def read_wav_channel_into_frames(wav, channel:, frame_starts:)
       frames << lines
     end
   end
-  puts "Frame line lengths: #{frames.map {|lines| lines.map(&:length).join(', ') }.join('; ')}"
+  #puts "Frame line lengths: #{frames.map {|lines| lines.map(&:length).join(', ') }.join('; ')}"
   frames
 end
 
@@ -130,7 +131,7 @@ def ex1
   frames.each_with_index.map do |lines, index|
     filename = File.expand_path("../frame-#{index + 1}.pgm", File.dirname(__FILE__))
     lines_to_image(lines, filename)
-    puts `convert #{filename} -resize 500x500 #{filename}_resized.png && imgcat #{filename}_resized.png`
+    #puts `convert #{filename} -resize 512x384 #{filename}_resized.png && imgcat #{filename}_resized.png`
   end
 end
 
