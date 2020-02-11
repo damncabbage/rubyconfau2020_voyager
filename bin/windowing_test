@@ -10,29 +10,22 @@ require_relative '../lib/pgm'
 
 def read_wav_channel_into_frames(wav, channel:, frame_starts:)
   # Ignore everything in the line until this point:
-  min_line_length = 3_000
+  min_line_length = 3_120
 
   # Give up after this point:
-  max_line_length = 3_600
-
-  # TODO: unused
-  #line_start_amplitude_range = -0.15..-0.10 # the down bit at the start
-  #line_end_amplitude_range = 0.08..0.15 # the up bit at the end
-  #line_end_spike_length = 60 # how long does it take to get from the end of the line to the 'up bit'?
+  max_line_length = 3_300
 
   min_line_end_length = max_line_length - min_line_length
-
   frames = []
   WaveFile::Reader.new(wav) do |reader|
     frame_starts.each do |frame_start|
-      puts reader.current_sample_frame
       previous_frame_ended_at = reader.current_sample_frame
 
       # Ignore the samples between the end of the last frame and the sample this frame starts from.
       reader.read(frame_start - previous_frame_ended_at)
 
       lines = []
-      line_limit = 500 # Arbitrary guess; should be 512, but I don't think that's gonna work.
+      line_limit = 505 # Arbitrary guess; should be 512, but I don't think that's gonna work.
       current_line_samples = []
       while lines.length < line_limit
         current_line_samples.concat(
@@ -42,20 +35,24 @@ def read_wav_channel_into_frames(wav, channel:, frame_starts:)
             .map(&channel)
         )
 
-        # Look ahead a certain amount, and pick the highest spike within it:
+        # Look ahead a certain amount, and pick the lowest spike within it:
         # that's the end of our line.
 
         lookahead_buffer = reader.read(min_line_end_length).samples.map(&channel)
-        highest_index = lookahead_buffer.each_with_index.max[1]
+        lowest_index = lookahead_buffer.each_with_index.min[1]
         
         # Then:
         # - Take the stuff before it and add it to the current line.
-        current_line_samples.concat lookahead_buffer[0..(highest_index-1)]
+        current_line_samples.concat lookahead_buffer[0..(lowest_index-1)]
         lines.push current_line_samples
+        ###puts [
+        ###  current_line_samples.length,
+        ###  reader.current_sample_frame.to_s.gsub(/\d(?=(...)+$)/, '\0,'),
+        ###].inspect
 
         # - Take the stuff after it and keep it for the next line.
         #   (Put the rest in the current_line_samples for next round.)
-        current_line_samples = lookahead_buffer[highest_index..-1]
+        current_line_samples = lookahead_buffer[lowest_index..-1]
 
         #smallest_line = current_line.length if 
         #max_line_length = current_line.length if current_line.length > max_line_length
@@ -82,18 +79,19 @@ end
 
 def normalise_line_lengths(lines)
   min_row_length = lines.map(&:length).min
+  gutter_length = 600
   lines.map do |row|
-    row[0..(min_row_length-1)]
+    row[0..(min_row_length - 1 - gutter_length)]
   end
 end
 
 def rotate_lines(lines)
-  lines = normalise_line_lengths(lines)
   Matrix[*lines].transpose.to_a
 end
 
 def lines_to_image(lines, filename)
   # HACK: Chop down to the smallest frame.
+  lines = normalise_line_lengths(lines)
   lines = rescale_lines_for_image(lines, new_min_value: 0, new_max_value: 255)
   lines = rotate_lines(lines)
   height = lines.length
@@ -112,10 +110,9 @@ def ex1
     wav_path,
     channel: :first,
     frame_starts: [
-      6_016_297,
-      8_405_413,
-      10_680_200,
-      #6_019_837,
+      6_016_643,
+      8_322_787,
+      10_674_494,
     ],
   )
   #right_frames = read_wav_channel_into_frames(
@@ -131,7 +128,7 @@ def ex1
   frames.each_with_index.map do |lines, index|
     filename = File.expand_path("../frame-#{index + 1}.pgm", File.dirname(__FILE__))
     lines_to_image(lines, filename)
-    #puts `convert #{filename} -resize 512x384 #{filename}_resized.png && imgcat #{filename}_resized.png`
+    puts `convert #{filename} -resize 505x379: #{filename}_resized.png && imgcat #{filename}_resized.png`
   end
 end
 
