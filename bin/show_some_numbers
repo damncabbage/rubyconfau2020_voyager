@@ -1,0 +1,21 @@
+#!/usr/bin/env ruby
+
+require 'bundler'
+Bundler.setup(:default, :development)
+
+require 'wavefile'
+
+def read_wav(wav_path)
+  WaveFile::Reader.new(wav_path) do |reader|
+    reader.read(6_016_643) # a guess
+
+    samples = reader.read(10000)
+      .samples
+      .each_slice(200).map(&:first)
+      .map(&:first) # left channel
+    puts `spark #{samples.map {|s| "#{s * 100}" }.join(" ")}`
+  end
+end
+
+wav_path = File.expand_path('../384kHzStereo.wav', File.dirname(__FILE__))
+read_wav(wav_path)

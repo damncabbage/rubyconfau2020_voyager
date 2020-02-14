@@ -1,10 +1,10 @@
 #!/usr/bin/env ruby
 
-require 'bundler/setup'
-require 'pry'
-require 'ostruct'
-require 'matrix'
+require 'bundler'
+Bundler.setup(:default, :development)
 
+require 'pry'
+require 'matrix'
 require 'wavefile'
 require_relative '../lib/pgm'
 
@@ -40,7 +40,7 @@ def read_wav_channel_into_frames(wav, channel:, frame_starts:)
 
         lookahead_buffer = reader.read(min_line_end_length).samples.map(&channel)
         lowest_index = lookahead_buffer.each_with_index.min[1]
-        
+
         # Then:
         # - Take the stuff before it and add it to the current line.
         current_line_samples.concat lookahead_buffer[0..(lowest_index-1)]
@@ -53,9 +53,6 @@ def read_wav_channel_into_frames(wav, channel:, frame_starts:)
         # - Take the stuff after it and keep it for the next line.
         #   (Put the rest in the current_line_samples for next round.)
         current_line_samples = lookahead_buffer[lowest_index..-1]
-
-        #smallest_line = current_line.length if 
-        #max_line_length = current_line.length if current_line.length > max_line_length
       end
 
       frames << lines
