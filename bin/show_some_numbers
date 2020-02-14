@@ -7,13 +7,24 @@ require 'wavefile'
 
 def read_wav(wav_path)
   WaveFile::Reader.new(wav_path) do |reader|
-    reader.read(6_016_643) # a guess
+    # Jump ahead a fair bit.
+    reader.read(6_315_943)
 
-    samples = reader.read(10000)
-      .samples
-      .each_slice(200).map(&:first)
-      .map(&:first) # left channel
-    puts `spark #{samples.map {|s| "#{s * 100}" }.join(" ")}`
+    samples = reader.read(6_000).samples.map(&:first)
+
+    # Print a sparkline graph
+    sparks = samples.each_slice(150).map(&:first)
+    puts "\n     " + `spark #{sparks.map {|s| "#{s * 100}" }.join(" ")}`
+
+    # Print a higher-res graph
+    require 'unicode_plot'
+    puts UnicodePlot
+      .lineplot(
+        samples,
+        color: :blue,
+        labels: false,
+      )
+      .render
   end
 end
 
