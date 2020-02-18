@@ -19,11 +19,7 @@ def read_wav(wav_path)
     # Print a higher-res graph
     require 'unicode_plot'
     puts UnicodePlot
-      .lineplot(
-        samples,
-        color: :blue,
-        labels: false,
-      )
+      .lineplot(samples, color: :blue, labels: false)
       .render
   end
 end

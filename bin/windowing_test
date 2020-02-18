@@ -22,12 +22,14 @@ def read_wav_channel_into_frames(wav, channel:, frame_starts:)
       previous_frame_ended_at = reader.current_sample_frame
 
       # Ignore the samples between the end of the last frame and the sample this frame starts from.
+      puts "Skipping ahead #{frame_start - previous_frame_ended_at} samples..."
       reader.read(frame_start - previous_frame_ended_at)
 
       lines = []
       line_limit = 505 # Arbitrary guess; should be 512, but I don't think that's gonna work.
       current_line_samples = []
       while lines.length < line_limit
+        puts "Scanning line #{lines.length} ..."
         current_line_samples.concat(
           reader
             .read(min_line_length - current_line_samples.length)
@@ -103,33 +105,39 @@ end
 def ex1
   wav_path = File.expand_path('../384kHzStereo.wav', File.dirname(__FILE__))
 
+  puts "Left frames..."
   left_frames = read_wav_channel_into_frames(
     wav_path,
     channel: :first,
     frame_starts: [
       6_016_643,
-      8_322_787,
-      10_674_494,
-      12_952_938,
-      15_211_460,
-      17_441_174,
-      19_629_977, # uh
-      33_278_344,
-      35_451_346,
-      39_885_982,
-      41_984_944,
+      #8_322_787,
+      #10_674_494,
+      #12_952_938,
+      #15_211_460,
+      #17_441_174,
+      #19_629_977, # uh
+      #33_278_344,
+      #35_451_346,
+      #39_885_982,
+      #41_984_944,
     ],
   )
-  #right_frames = read_wav_channel_into_frames(
-  #  wav_path,
-  #  channel: :last,
-  #  start_from_sample: 0,
-  #  end_at_sample: 50,
-  #)
-  right_frames = []
+
+  puts "Right frames..."
+  right_frames = read_wav_channel_into_frames(
+    wav_path,
+    channel: :last,
+    frame_starts: [
+      #116_915_239, # frame 95, opera house
+      116_915_498, # frame 95, opera house
+      121_455_274, # frame 97
+    ],
+  )
 
   frames = left_frames + right_frames
 
+  puts "Starting..."
   frames.each_with_index.map do |lines, index|
     filename = File.expand_path("../frame-#{index + 1}.pgm", File.dirname(__FILE__))
     lines_to_image(lines, filename)
